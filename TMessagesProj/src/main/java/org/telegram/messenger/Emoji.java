@@ -25,11 +25,14 @@ import android.os.Build;
 import android.text.Spannable;
 import android.text.Spanned;
 import android.text.TextPaint;
+import android.text.style.CharacterStyle;
 import android.text.style.DynamicDrawableSpan;
 import android.text.style.ImageSpan;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+
+import org.telegram.ui.Components.TypefaceSpan;
 
 public class Emoji {
     private static HashMap<CharSequence, DrawableInfo> rects = new HashMap<>();
@@ -353,7 +356,7 @@ public class Emoji {
         StringBuilder addionalCode = new StringBuilder(2);
         boolean nextIsSkinTone;
         EmojiDrawable drawable;
-        EmojiSpan span;
+        CharacterStyle span;
         int length = cs.length();
         boolean doneEmoji = false;
         int nextValidLength;
@@ -451,7 +454,9 @@ public class Emoji {
                     }
                     drawable = Emoji.getEmojiDrawable(emojiCode.subSequence(0, emojiCode.length()));
                     if (drawable != null) {
-                        span = new EmojiSpan(drawable, DynamicDrawableSpan.ALIGN_BOTTOM, size, fontMetrics);
+                        //span = new EmojiSpan(drawable, DynamicDrawableSpan.ALIGN_BOTTOM, size, fontMetrics);
+                        span = new TypefaceSpan(AndroidUtilities.getTypeface("NotoColorEmoji.ttf"));
+                        //span = new TypefaceSpan(AndroidUtilities.getTypeface("fonts/NotoColorEmoji.ttf"));
                         s.setSpan(span, startIndex, startIndex + startLength, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                         emojiCount++;
                     }

@@ -166,7 +166,7 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
         return code;
     }
 
-    private class ImageViewEmoji extends ImageView {
+    private class ImageViewEmoji extends ForegroundTextView {
 
         private boolean touched;
         private float lastX;
@@ -235,8 +235,12 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
                     return false;
                 }
             });
-            setBackgroundDrawable(Theme.getSelectorDrawable(false));
-            setScaleType(ImageView.ScaleType.CENTER);
+            setBackgroundResource(R.drawable.list_selector_ex);
+            setGravity(Gravity.CENTER);
+            setTypeface(AndroidUtilities.getTypeface("NotoColorEmoji.ttf"));
+            //setTypeface(AndroidUtilities.getTypeface("fonts/NotoColorEmoji.ttf"));
+            setTextColor(0xff000000);
+            setForegroundGravity(Gravity.CENTER);
         }
 
         private void sendEmoji(String override) {
@@ -281,6 +285,9 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
         @Override
         public void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
             setMeasuredDimension(View.MeasureSpec.getSize(widthMeasureSpec), View.MeasureSpec.getSize(widthMeasureSpec));
+            if (getPaint().getTextSize() != 0.6f * getMeasuredWidth()) {
+                getPaint().setTextSize(0.6f * getMeasuredWidth());
+            }
         }
 
         @Override
@@ -316,7 +323,9 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
                             } else {
                                 emojiColor.remove(code);
                             }
-                            setImageDrawable(Emoji.getEmojiBigDrawable(code));
+                            setText(code);
+                            setForeground(null);
+
                             sendEmoji(null);
                             saveEmojiColors();
                         } else {
@@ -475,6 +484,7 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
         private int selection;
         private Paint rectPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private RectF rect = new RectF();
+        private Paint textPaint = new Paint();
 
         public void setEmoji(String emoji, int arrowPosition) {
             currentEmoji = emoji;
@@ -504,6 +514,10 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
 
             backgroundDrawable = getResources().getDrawable(R.drawable.stickers_back_all);
             arrowDrawable = getResources().getDrawable(R.drawable.stickers_back_arrow);
+
+            textPaint.setTypeface(AndroidUtilities.getTypeface("NotoColorEmoji.ttf"));
+            //textPaint.setTypeface(AndroidUtilities.getTypeface("fonts/NotoColorEmoji.ttf"));
+            textPaint.setColor(0xff000000);
         }
 
         @Override
@@ -547,11 +561,8 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
                         }
                         code = addColorToCode(code, color);
                     }
-                    Drawable drawable = Emoji.getEmojiBigDrawable(code);
-                    if (drawable != null) {
-                        drawable.setBounds(x, y, x + emojiSize, y + emojiSize);
-                        drawable.draw(canvas);
-                    }
+                    textPaint.setTextSize(emojiSize * 0.8f);
+                    canvas.drawText(code, x, y + emojiSize * 0.8f, textPaint);
                 }
             }
         }
@@ -2335,7 +2346,8 @@ public class EmojiView extends FrameLayout implements NotificationCenter.Notific
                     coloredCode = addColorToCode(coloredCode, color);
                 }
             }
-            imageView.setImageDrawable(Emoji.getEmojiBigDrawable(coloredCode));
+            imageView.setText(code);
+            imageView.setForeground(null);
             imageView.setTag(code);
             return imageView;
         }
