@@ -445,7 +445,7 @@ public class Emoji {
                         i += 2;
                     }
                 }
-                if (doneEmoji) {
+                if (false /*doneEmoji*/) {
                     if (emojiOnly != null) {
                         emojiOnly[0]++;
                     }

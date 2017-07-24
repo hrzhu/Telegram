@@ -8,3 +8,7 @@ local.properties
 gradle.properties
 
 TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
+
+TMessagesProj/.externalNativeBuild/
+TMessagesProj/TMessagesProj-armv7-release.apk
+TMessagesProj/google-services.json
