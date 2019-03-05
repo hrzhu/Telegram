@@ -719,7 +719,7 @@
     <string name="NotificationActionPinnedGeoLiveChannel">%1$s pinned a live location</string>
     <string name="NotificationActionPinnedGifChannel">%1$s pinned a GIF</string>
     <string name="NotificationActionPinnedMusicChannel">%1$s pinned a track</string>
-    <string name="SecretChatName">Telegram</string>
+    <string name="SecretChatName">Hachigram</string>
     <!--contacts view-->
     <string name="SelectContact">Select Contact</string>
     <string name="ContactShare">SHARE CONTACT</string>
