@@ -1,9 +1,9 @@
 /*
- * This is the source code of Telegram for Android v. 3.x.x.
+ * This is the source code of Telegram for Android v. 5.x.x.
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2017.
+ * Copyright Nikolai Kudashov, 2013-2018.
  */
 
 package org.telegram.ui.Adapters;
@@ -39,6 +39,7 @@ import org.telegram.ui.Cells.UserCell;
 import org.telegram.ui.Components.CombinedDrawable;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
+import org.telegram.ui.DialogsActivity;
 
 import java.util.ArrayList;
 
@@ -95,23 +96,10 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter {
         return current != getItemCount() || current == 1;
     }
 
-    private ArrayList<TLRPC.TL_dialog> getDialogsArray() {
-        if (dialogsType == 0) {
-            return MessagesController.getInstance(currentAccount).dialogs;
-        } else if (dialogsType == 1) {
-            return MessagesController.getInstance(currentAccount).dialogsServerOnly;
-        } else if (dialogsType == 2) {
-            return MessagesController.getInstance(currentAccount).dialogsGroupsOnly;
-        } else if (dialogsType == 3) {
-            return MessagesController.getInstance(currentAccount).dialogsForward;
-        }
-        return null;
-    }
-
     @Override
     public int getItemCount() {
         showContacts = false;
-        ArrayList<TLRPC.TL_dialog> array = getDialogsArray();
+        ArrayList<TLRPC.TL_dialog> array = DialogsActivity.getDialogsArray(dialogsType, currentAccount);
         int dialogsCount = array.size();
         if (dialogsCount == 0 && MessagesController.getInstance(currentAccount).loadingDialogs) {
             return 0;
@@ -143,7 +131,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter {
             }
             return MessagesController.getInstance(currentAccount).getUser(ContactsController.getInstance(currentAccount).contacts.get(i).user_id);
         }
-        ArrayList<TLRPC.TL_dialog> arrayList = getDialogsArray();
+        ArrayList<TLRPC.TL_dialog> arrayList = DialogsActivity.getDialogsArray(dialogsType, currentAccount);
         if (hasHints) {
             int count = MessagesController.getInstance(currentAccount).hintDialogs.size();
             if (i < 2 + count) {
@@ -254,10 +242,12 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter {
             case 0: {
                 DialogCell cell = (DialogCell) holder.itemView;
                 TLRPC.TL_dialog dialog = (TLRPC.TL_dialog) getItem(i);
+                TLRPC.TL_dialog nextDialog = (TLRPC.TL_dialog) getItem(i + 1);
                 if (hasHints) {
                     i -= 2 + MessagesController.getInstance(currentAccount).hintDialogs.size();
                 }
                 cell.useSeparator = (i != getItemCount() - 1);
+                cell.fullSeparator = dialog.pinned && nextDialog != null && !nextDialog.pinned;
                 if (dialogsType == 0) {
                     if (AndroidUtilities.isTablet()) {
                         cell.setDialogSelected(dialog.id == openedDialogId);
@@ -313,7 +303,7 @@ public class DialogsAdapter extends RecyclerListView.SelectionAdapter {
                 i -= 2 + count;
             }
         }
-        if (i == getDialogsArray().size()) {
+        if (i == DialogsActivity.getDialogsArray(dialogsType, currentAccount).size()) {
             if (!MessagesController.getInstance(currentAccount).dialogsEndReached) {
                 return 1;
             } else {

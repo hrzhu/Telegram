@@ -1,9 +1,9 @@
 /*
- * This is the source code of Telegram for Android v. 3.x.x.
+ * This is the source code of Telegram for Android v. 5.x.x.
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2017.
+ * Copyright Nikolai Kudashov, 2013-2018.
  */
 
 package org.telegram.ui.Components;
@@ -100,6 +100,7 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
                             args.putLong("dialog_id", parentFragment.getDialogId());
                         }
                         ProfileActivity fragment = new ProfileActivity(args);
+                        fragment.setUserInfo(parentFragment.getCurrentUserInfo());
                         fragment.setPlayProfileAnimation(true);
                         parentFragment.presentFragment(fragment);
                     }
@@ -264,9 +265,9 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
                 TLRPC.ChatFull info = parentFragment.getCurrentChatInfo();
                 if (ChatObject.isChannel(chat)) {
                     if (info != null && info.participants_count != 0) {
-                        if (chat.megagroup && info.participants_count <= 200) {
-                            if (onlineCount > 1 && info.participants_count != 0) {
-                                newSubtitle = String.format("%s, %s", LocaleController.formatPluralString("Members", info.participants_count), LocaleController.formatPluralString("OnlineCount", onlineCount));
+                        if (chat.megagroup) {
+                            if (onlineCount > 1) {
+                                newSubtitle = String.format("%s, %s", LocaleController.formatPluralString("Members", info.participants_count), LocaleController.formatPluralString("OnlineCount", Math.min(onlineCount, info.participants_count)));
                             } else {
                                 newSubtitle = LocaleController.formatPluralString("Members", info.participants_count);
                             }
@@ -315,8 +316,10 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
                 String newStatus;
                 if (user.id == UserConfig.getInstance(currentAccount).getClientUserId()) {
                     newStatus = LocaleController.getString("ChatYourSelf", R.string.ChatYourSelf);
-                } else if (user.id == 333000 || user.id == 777000) {
+                } else if (user.id == 333000 || user.id == 777000 || user.id == 42777) {
                     newStatus = LocaleController.getString("ServiceNotifications", R.string.ServiceNotifications);
+                } else if (MessagesController.isSupportUser(user)) {
+                    newStatus = LocaleController.getString("SupportStatus", R.string.SupportStatus);
                 } else if (user.bot) {
                     newStatus = LocaleController.getString("Bot", R.string.Bot);
                 } else {
@@ -344,7 +347,7 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
         }
         avatarDrawable.setInfo(chat);
         if (avatarImageView != null) {
-            avatarImageView.setImage(newPhoto, "50_50", avatarDrawable);
+            avatarImageView.setImage(newPhoto, "50_50", avatarDrawable, chat);
         }
     }
 
@@ -358,7 +361,7 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
         }
 
         if (avatarImageView != null) {
-            avatarImageView.setImage(newPhoto, "50_50", avatarDrawable);
+            avatarImageView.setImage(newPhoto, "50_50", avatarDrawable, user);
         }
     }
 
@@ -367,6 +370,7 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
             return;
         }
         TLRPC.FileLocation newPhoto = null;
+        Object parentObject = null;
         TLRPC.User user = parentFragment.getCurrentUser();
         TLRPC.Chat chat = parentFragment.getCurrentChat();
         if (user != null) {
@@ -376,14 +380,16 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
             } else if (user.photo != null) {
                 newPhoto = user.photo.photo_small;
             }
+            parentObject = user;
         } else if (chat != null) {
             if (chat.photo != null) {
                 newPhoto = chat.photo.photo_small;
             }
             avatarDrawable.setInfo(chat);
+            parentObject = chat;
         }
         if (avatarImageView != null) {
-            avatarImageView.setImage(newPhoto, "50_50", avatarDrawable);
+            avatarImageView.setImage(newPhoto, "50_50", avatarDrawable, parentObject);
         }
     }
 
@@ -405,6 +411,8 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
                     onlineCount++;
                 }
             }
+        } else if (info instanceof TLRPC.TL_channelFull && info.participants_count > 200) {
+            onlineCount = info.online_count;
         }
     }
 
@@ -412,7 +420,7 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         if (parentFragment != null) {
-            NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.didUpdatedConnectionState);
+            NotificationCenter.getInstance(currentAccount).addObserver(this, NotificationCenter.didUpdateConnectionState);
             currentConnectionState = ConnectionsManager.getInstance(currentAccount).getConnectionState();
             updateCurrentConnectionState();
         }
@@ -422,13 +430,13 @@ public class ChatAvatarContainer extends FrameLayout implements NotificationCent
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         if (parentFragment != null) {
-            NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.didUpdatedConnectionState);
+            NotificationCenter.getInstance(currentAccount).removeObserver(this, NotificationCenter.didUpdateConnectionState);
         }
     }
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.didUpdatedConnectionState) {
+        if (id == NotificationCenter.didUpdateConnectionState) {
             int state = ConnectionsManager.getInstance(currentAccount).getConnectionState();
             if (currentConnectionState != state) {
                 currentConnectionState = state;

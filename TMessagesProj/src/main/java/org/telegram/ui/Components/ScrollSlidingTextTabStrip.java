@@ -1,9 +1,9 @@
 /*
- * This is the source code of Telegram for Android v. 3.x.x.
+ * This is the source code of Telegram for Android v. 5.x.x.
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
- * Copyright Nikolai Kudashov, 2013-2017.
+ * Copyright Nikolai Kudashov, 2013-2018.
  */
 
 package org.telegram.ui.Components;
@@ -35,6 +35,8 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView {
 
     private LinearLayout tabsContainer;
     private ScrollSlidingTabStripDelegate delegate;
+
+    private boolean useSameWidth;
 
     private int tabCount;
     private int currentPosition;
@@ -152,6 +154,10 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView {
         }
     }
 
+    public void setUseSameWidth(boolean value) {
+        useSameWidth = value;
+    }
+
     public Paint getRectPaint() {
         return rectPaint;
     }
@@ -200,8 +206,6 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView {
         tab.setGravity(Gravity.CENTER);
         tab.setText(text);
         tab.setBackgroundDrawable(Theme.createSelectorDrawable(Theme.getColor(Theme.key_actionBarDefaultSelector), 2));
-        tab.setTag(selectedTabId == id ? Theme.key_actionBarDefaultTitle : Theme.key_actionBarDefaultSubtitle);
-        tab.setTextColor(Theme.getColor(currentPosition == position ? Theme.key_actionBarDefaultTitle : Theme.key_actionBarDefaultSubtitle));
         tab.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
         tab.setSingleLine(true);
         tab.setTypeface(AndroidUtilities.getTypeface("fonts/rmedium.ttf"));
@@ -243,8 +247,21 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView {
         tabsContainer.addView(tab, LayoutHelper.createLinear(0, LayoutHelper.MATCH_PARENT));
     }
 
+    public void finishAddingTabs() {
+        int count = tabsContainer.getChildCount();
+        for (int a = 0; a < count; a++) {
+            TextView tab = (TextView) tabsContainer.getChildAt(a);
+            tab.setTag(currentPosition == a ? Theme.key_actionBarDefaultTitle : Theme.key_actionBarDefaultSubtitle);
+            tab.setTextColor(Theme.getColor(currentPosition == a ? Theme.key_actionBarDefaultTitle : Theme.key_actionBarDefaultSubtitle));
+        }
+    }
+
     public int getCurrentTabId() {
         return selectedTabId;
+    }
+
+    public void setInitialTabId(int id) {
+        selectedTabId = id;
     }
 
     public int getFirstTabId() {
@@ -271,6 +288,9 @@ public class ScrollSlidingTextTabStrip extends HorizontalScrollView {
             if (allTextWidth > width) {
                 layoutParams.weight = 0;
                 layoutParams.width = LinearLayout.LayoutParams.WRAP_CONTENT;
+            } else if (useSameWidth) {
+                layoutParams.weight = 1.0f / count;
+                layoutParams.width = 0;
             } else {
                 layoutParams.weight = 1.0f / allTextWidth * positionToWidth.get(a);
                 layoutParams.width = 0;

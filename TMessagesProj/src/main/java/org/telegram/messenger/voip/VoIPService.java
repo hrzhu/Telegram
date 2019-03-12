@@ -1,5 +1,5 @@
 /*
- * This is the source code of Telegram for Android v. 3.x.x.
+ * This is the source code of Telegram for Android v. 5.x.x.
  * It is licensed under GNU GPL v. 2 or later.
  * You should have received a copy of the license in this archive (see LICENSE).
  *
@@ -46,6 +46,7 @@ import org.telegram.messenger.NotificationsController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
+import org.telegram.messenger.XiaomiUtilities;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.RequestDelegate;
 import org.telegram.tgnet.TLObject;
@@ -68,7 +69,7 @@ import java.util.List;
 public class VoIPService extends VoIPBaseService{
 
 	public static final int CALL_MIN_LAYER = 65;
-	public static final int CALL_MAX_LAYER = 74;
+	public static final int CALL_MAX_LAYER = VoIPController.getConnectionMaxLayer();
 
 	public static final int STATE_HANGING_UP = 10;
 	public static final int STATE_EXCHANGING_KEYS = 12;
@@ -102,6 +103,9 @@ public class VoIPService extends VoIPBaseService{
 	private List<Integer> groupUsersToAdd=new ArrayList<>();
 	private boolean upgrading;
 	private boolean joiningGroupCall;
+	private String debugLog;
+
+	private boolean startedRinging=false;
 
 	@Nullable
 	@Override
@@ -145,7 +149,8 @@ public class VoIPService extends VoIPBaseService{
 				extras.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, addAccountToTelecomManager());
 				myExtras.putInt("call_type", 1);
 				extras.putBundle(TelecomManager.EXTRA_OUTGOING_CALL_EXTRAS, myExtras);
-				tm.placeCall(Uri.fromParts("sip", UserConfig.getInstance(currentAccount).getClientUserId()+";user="+user.id, null), extras);
+				ContactsController.getInstance(currentAccount).createOrUpdateConnectionServiceContact(user.id, user.first_name, user.last_name);
+				tm.placeCall(Uri.fromParts("tel", "+99084"+user.id, null), extras);
 			}else{
 				delayedStartOutgoingCall=new Runnable(){
 					@Override
@@ -207,7 +212,7 @@ public class VoIPService extends VoIPBaseService{
 
 	@Override
 	protected void onControllerPreRelease(){
-		if(needSendDebugLog){
+		/*if(BuildConfig.DEBUG){
 			String debugLog=controller.getDebugLog();
 			TLRPC.TL_phone_saveCallDebug req=new TLRPC.TL_phone_saveCallDebug();
 			req.debug=new TLRPC.TL_dataJSON();
@@ -223,7 +228,9 @@ public class VoIPService extends VoIPBaseService{
                     }
 				}
 			});
-		}
+		}*/
+		if(debugLog==null)
+			debugLog=controller.getDebugLog();
 	}
 
 	public static VoIPService getSharedInstance() {
@@ -266,6 +273,10 @@ public class VoIPService extends VoIPBaseService{
 			@Override
 			public void run(TLObject response, TLRPC.TL_error error) {
 				callReqId = 0;
+				if(endCallAfterRequest){
+					callEnded();
+					return;
+				}
 				if (error == null) {
 					TLRPC.messages_DhConfig res = (TLRPC.messages_DhConfig) response;
 					if (response instanceof TLRPC.TL_messages_dhConfig) {
@@ -356,7 +367,7 @@ public class VoIPService extends VoIPBaseService{
 									} else {
 										if (error.code == 400 && "PARTICIPANT_VERSION_OUTDATED".equals(error.text)) {
 											callFailed(VoIPController.ERROR_PEER_OUTDATED);
-										} else if(error.code==403 && "USER_PRIVACY_RESTRICTED".equals(error.text)){
+										} else if(error.code==403){
 											callFailed(VoIPController.ERROR_PRIVACY);
 										}else if(error.code==406){
 											callFailed(VoIPController.ERROR_LOCALIZED);
@@ -389,6 +400,14 @@ public class VoIPService extends VoIPBaseService{
 			stopSelf();
 			return;
 		}
+		if(Build.VERSION.SDK_INT>=19 && XiaomiUtilities.isMIUI() && !XiaomiUtilities.isCustomPermissionGranted(XiaomiUtilities.OP_SHOW_WHEN_LOCKED)){
+			if(((KeyguardManager)getSystemService(KEYGUARD_SERVICE)).inKeyguardRestrictedInputMode()){
+				if(BuildVars.LOGS_ENABLED)
+					FileLog.e("MIUI: no permission to show when locked but the screen is locked. ¯\\_(ツ)_/¯");
+				stopSelf();
+				return;
+			}
+		}
 		TLRPC.TL_phone_receivedCall req = new TLRPC.TL_phone_receivedCall();
 		req.peer = new TLRPC.TL_inputPhoneCall();
 		req.peer.id = call.id;
@@ -411,6 +430,7 @@ public class VoIPService extends VoIPBaseService{
 							stopSelf();
 						}else{
 							if(USE_CONNECTION_SERVICE){
+								ContactsController.getInstance(currentAccount).createOrUpdateConnectionServiceContact(user.id, user.first_name, user.last_name);
 								TelecomManager tm=(TelecomManager) getSystemService(TELECOM_SERVICE);
 								Bundle extras=new Bundle();
 								extras.putInt("call_type", 1);
@@ -435,13 +455,13 @@ public class VoIPService extends VoIPBaseService{
             FileLog.d("starting ringing for call " + call.id);
         }
 		dispatchStateChanged(STATE_WAITING_INCOMING);
-		startRingtoneAndVibration(user.id);
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && !((KeyguardManager) getSystemService(KEYGUARD_SERVICE)).inKeyguardRestrictedInputMode() && NotificationManagerCompat.from(this).areNotificationsEnabled()) {
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP){
 			showIncomingNotification(ContactsController.formatName(user.first_name, user.last_name), null, user, null, 0, VoIPActivity.class);
             if (BuildVars.LOGS_ENABLED) {
                 FileLog.d("Showing incoming call notification");
             }
 		} else {
+			startRingtoneAndVibration(user.id);
             if (BuildVars.LOGS_ENABLED) {
                 FileLog.d("Starting incall activity for incoming call");
             }
@@ -452,9 +472,14 @@ public class VoIPService extends VoIPBaseService{
                     FileLog.e("Error starting incall activity", x);
                 }
 			}
-			if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O){
-				showNotification();
-			}
+		}
+	}
+
+	@Override
+	public void startRingtoneAndVibration(){
+		if(!startedRinging){
+			startRingtoneAndVibration(user.id);
+			startedRinging=true;
 		}
 	}
 
@@ -587,6 +612,14 @@ public class VoIPService extends VoIPBaseService{
 			}else{
 				dispatchStateChanged(STATE_HANGING_UP);
 				endCallAfterRequest=true;
+				AndroidUtilities.runOnUIThread(new Runnable(){
+					@Override
+					public void run(){
+						if(currentState==STATE_HANGING_UP){
+							callEnded();
+						}
+					}
+				}, 5000);
 			}
 			return;
 		}
@@ -717,12 +750,32 @@ public class VoIPService extends VoIPBaseService{
 				playingSound = true;
 				soundPool.play(spBusyId, 1, 1, 0, -1, 1);
 				AndroidUtilities.runOnUIThread(afterSoundRunnable, 1500);
+				endConnectionServiceCall(1500);
 				stopSelf();
 			} else {
 				callEnded();
 			}
-			if (call.need_rating || forceRating) {
+			if (call.need_rating || forceRating || (controller!=null && VoIPServerConfig.getBoolean("bad_call_rating", true) && controller.needRate())) {
 				startRatingActivity();
+			}
+			if(debugLog==null && controller!=null){
+            	debugLog=controller.getDebugLog();
+			}
+			if(needSendDebugLog && debugLog!=null){
+				TLRPC.TL_phone_saveCallDebug req=new TLRPC.TL_phone_saveCallDebug();
+				req.debug=new TLRPC.TL_dataJSON();
+				req.debug.data=debugLog;
+				req.peer=new TLRPC.TL_inputPhoneCall();
+				req.peer.access_hash=call.access_hash;
+				req.peer.id=call.id;
+				ConnectionsManager.getInstance(currentAccount).sendRequest(req, new RequestDelegate(){
+					@Override
+					public void run(TLObject response, TLRPC.TL_error error){
+						if (BuildVars.LOGS_ENABLED) {
+							FileLog.d("Sent debug logs, response=" + response);
+						}
+					}
+				});
 			}
 		} else if (call instanceof TLRPC.TL_phoneCall && authKey == null){
 			if(call.g_a_or_b==null){
@@ -788,6 +841,10 @@ public class VoIPService extends VoIPBaseService{
                 if (BuildVars.LOGS_ENABLED) {
                     FileLog.d("!!!!!! CALL RECEIVED");
                 }
+                if(connectingSoundRunnable!=null){
+					AndroidUtilities.cancelRunOnUIThread(connectingSoundRunnable);
+					connectingSoundRunnable=null;
+				}
 				if (spPlayID != 0)
 					soundPool.stop(spPlayID);
 				spPlayID = soundPool.play(spRingbackID, 1, 1, 0, -1, 1);
@@ -888,6 +945,12 @@ public class VoIPService extends VoIPBaseService{
 		});
 	}
 
+	private int convertDataSavingMode(int mode){
+		if(mode!=VoIPController.DATA_SAVING_ROAMING)
+			return mode;
+		return ApplicationLoader.isRoaming() ? VoIPController.DATA_SAVING_MOBILE : VoIPController.DATA_SAVING_NEVER;
+	}
+
 	private void initiateActualEncryptedCall() {
 		if (timeoutRunnable != null) {
 			AndroidUtilities.cancelRunOnUIThread(timeoutRunnable);
@@ -927,7 +990,7 @@ public class VoIPService extends VoIPBaseService{
 			nprefs.edit().putStringSet("calls_access_hashes", hashes).commit();
 			final SharedPreferences preferences = MessagesController.getGlobalMainSettings();
 			controller.setConfig(MessagesController.getInstance(currentAccount).callPacketTimeout / 1000.0, MessagesController.getInstance(currentAccount).callConnectTimeout / 1000.0,
-					preferences.getInt("VoipDataSaving", VoIPController.DATA_SAVING_NEVER), call.id);
+					convertDataSavingMode(preferences.getInt("VoipDataSaving", VoIPHelper.getDataSavingDefault())), call.id);
 			controller.setEncryptionKey(authKey, isOutgoing);
 			TLRPC.TL_phoneConnection[] endpoints = new TLRPC.TL_phoneConnection[1 + call.alternative_connections.size()];
 			endpoints[0] = call.connection;
@@ -935,21 +998,8 @@ public class VoIPService extends VoIPBaseService{
 				endpoints[i + 1] = call.alternative_connections.get(i);
 
 			SharedPreferences prefs=MessagesController.getGlobalMainSettings();
-			VoIPHelper.upgradeP2pSetting(currentAccount);
-			boolean allowP2p=true;
-			switch(MessagesController.getMainSettings(currentAccount).getInt("calls_p2p_new", MessagesController.getInstance(currentAccount).defaultP2pContacts ? 1 : 0)){
-				case 0:
-					allowP2p=true;
-					break;
-				case 2:
-					allowP2p=false;
-					break;
-				case 1:
-					allowP2p=ContactsController.getInstance(currentAccount).contactsDict.get(user.id)!=null;
-					break;
-			}
 
-			controller.setRemoteEndpoints(endpoints, call.protocol.udp_p2p && allowP2p, BuildVars.DEBUG_VERSION && prefs.getBoolean("dbg_force_tcp_in_calls", false), call.protocol.max_layer);
+			controller.setRemoteEndpoints(endpoints, call.p2p_allowed, prefs.getBoolean("dbg_force_tcp_in_calls", false), call.protocol.max_layer);
 			if(prefs.getBoolean("dbg_force_tcp_in_calls", false)){
 				AndroidUtilities.runOnUIThread(new Runnable(){
 					@Override
@@ -995,7 +1045,7 @@ public class VoIPService extends VoIPBaseService{
 			soundPool.stop(spPlayID);
 		spPlayID = soundPool.play(spConnectingId, 1, 1, 0, -1, 1);
 		if (spPlayID == 0) {
-			AndroidUtilities.runOnUIThread(new Runnable() {
+			AndroidUtilities.runOnUIThread(connectingSoundRunnable=new Runnable() {
 				@Override
 				public void run() {
 					if (sharedInstance == null)
@@ -1004,6 +1054,8 @@ public class VoIPService extends VoIPBaseService{
 						spPlayID = soundPool.play(spConnectingId, 1, 1, 0, -1, 1);
 					if (spPlayID == 0)
 						AndroidUtilities.runOnUIThread(this, 100);
+					else
+						connectingSoundRunnable=null;
 				}
 			}, 100);
 		}
@@ -1045,6 +1097,9 @@ public class VoIPService extends VoIPBaseService{
 	}
 
 	public void onUIForegroundStateChanged(boolean isForeground) {
+		if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.LOLLIPOP)
+			return;
+
 		if (currentState == STATE_WAITING_INCOMING) {
 			if (isForeground) {
 				stopForeground(true);
@@ -1235,6 +1290,7 @@ public class VoIPService extends VoIPBaseService{
 				};
 				AndroidUtilities.runOnUIThread(delayedStartOutgoingCall, 2000);
 			}
+			systemCallConnection.setAddress(Uri.fromParts("tel", "+99084"+user.id, null), TelecomManager.PRESENTATION_ALLOWED);
 			systemCallConnection.setCallerDisplayName(ContactsController.formatName(user.first_name, user.last_name), TelecomManager.PRESENTATION_ALLOWED);
 		}
 		return systemCallConnection;
